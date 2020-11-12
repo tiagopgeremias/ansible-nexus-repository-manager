@@ -1,0 +1,80 @@
+- name: Create Nexus group
+  group:
+    name: nexus
+    state: present
+
+- name: Create nexus user
+  user:
+    name: nexus
+    groups: nexus
+    create_home: yes
+
+- name: Download Sonatype Nexus
+  get_url:
+    url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+    dest: /tmp/latest-unix.tar.gz
+    validate_certs: no
+
+- name: Extract Nexus
+  unarchive:
+    copy: no
+    src: "/tmp/latest-unix.tar.gz"
+    dest: "/tmp"
+
+- name: Move Nexus
+  command: "mv /tmp/nexus-3.28.1-01 /opt/nexus"
+  ignore_errors: yes
+
+- name: Move Nexus Data
+  command: "mv /tmp/sonatype-work /opt/nexusdata"
+  ignore_errors: yes
+
+- name: Configure Nexus.rc
+  template:
+    src: nexus.rc.j2
+    dest: /opt/nexus/bin/nexus.rc
+
+- name: JVM Configuration
+  template:
+    src: nexus.vmoptions.j2
+    dest: /opt/nexus/bin/nexus.vmoptions
+
+- name: Customize Jetty Section
+  template:
+    src: nexus-default.properties.j2
+    dest: /opt/nexus/etc/nexus-default.properties
+
+- name: Configure Systemd service
+  template:
+    src: nexus.service.j2
+    dest: /etc/systemd/system/nexus.service
+
+- name: Add or modify nofile soft limit for the user nexus
+  pam_limits:
+    domain: nexus
+    limit_type: "-"
+    limit_item: nofile
+    value: 65536
+
+- name: Change nexusdata Directory permission
+  file:
+    path: /opt/nexusdata
+    owner: nexus
+    group: nexus
+    recurse: yes
+    mode: '0755'
+
+- name: Change nexus Directory permission
+  file:
+    path: /opt/nexus
+    owner: nexus
+    group: nexus
+    recurse: yes
+    mode: '0755'
+
+- name: Enable service httpd and ensure it is not masked
+  systemd:
+    name: nexus
+    state: started
+    enabled: yes
+    daemon_reload: yes
